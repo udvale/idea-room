@@ -2,6 +2,7 @@
 .env
 .env.local
 /node_modules/
+CLAUDE.md
 
 # React Router
 /.react-router/
