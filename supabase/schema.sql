@@ -79,8 +79,8 @@ create policy "ideas are readable" on public.ideas
   for select using (true);
 
 create policy "users post their own ideas" on public.ideas
-  for insert to authenticated
-  with check (is_ai = false and author_id = auth.uid() and vote_count = 0);
+  for insert to authenticated 
+  with check (is_ai = false and author_id = auth.uid());
 
 create policy "presenter posts AI ideas" on public.ideas
   for insert to authenticated

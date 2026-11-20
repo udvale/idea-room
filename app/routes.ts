@@ -8,4 +8,5 @@ export default [
   route("reset-password", "routes/reset-password.tsx"),
   route("logout", "routes/logout.tsx"),
   route("auth/callback", "routes/auth.callback.tsx"),
+  route("room/:slug", "routes/room.tsx"),
 ] satisfies RouteConfig;
