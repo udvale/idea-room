@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { data, Form, Link, useFetcher, useNavigation } from "react-router";
 import type { Route } from "./+types/room";
 import { createClient } from "~/lib/supabase.server";
+import { generateIdeas } from "~/lib/gemini.server";
+
+const TOP_N = 5; // how many top-voted ideas to send to Gemini
+const AI_COUNT = 3; // how many new ideas to ask for
 
 // LOADER: find the room, make sure the visitor has a session (anonymous if
 // needed), then load the ideas and which ones this visitor already voted on.
@@ -112,6 +116,51 @@ export async function action({ request, params }: Route.ActionArgs) {
     return data({ ok: true, error: null }, { headers });
   }
 
+  if (intent === "generate") {
+    const { data: room } = await supabase
+      .from("rooms")
+      .select("id, title, owner_id")
+      .eq("slug", params.slug)
+      .maybeSingle();
+    if (!room) return data({ ok: false, error: "Room not found." }, { headers });
+
+    // Hiding the button isn't security: anyone can POST intent=generate.
+    // So check ownership here, before spending a Gemini call. (RLS also
+    // blocks non-owners from inserting is_ai ideas, as a second layer.)
+    if (room.owner_id !== user.id) {
+      return data({ ok: false, error: "Only the presenter can generate AI ideas." }, { headers });
+    }
+
+    const { data: top } = await supabase
+      .from("ideas")
+      .select("content")
+      .eq("room_id", room.id)
+      .order("vote_count", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(TOP_N);
+    if (!top?.length) {
+      return data({ ok: false, error: "Add a few ideas first so the AI has something to build on." }, { headers });
+    }
+
+    let generated: string[];
+    try {
+      generated = await generateIdeas(room.title, top.map((i) => i.content as string), AI_COUNT);
+    } catch (e) {
+      console.error("Gemini failed:", e); // full details in the server terminal only
+      return data({ ok: false, error: "AI generation failed. Please try again." }, { headers });
+    }
+    if (!generated.length) {
+      return data({ ok: false, error: "The AI didn't come up with anything. Try again." }, { headers });
+    }
+
+    // One insert for all rows. Allowed by the "presenter posts AI ideas" policy.
+    const { error } = await supabase
+      .from("ideas")
+      .insert(generated.map((content) => ({ room_id: room.id, content, is_ai: true })));
+    if (error) return data({ ok: false, error: error.message }, { headers });
+    return data({ ok: true, error: null }, { headers });
+  }
+
   return data({ ok: false, error: "Unknown action." }, { headers });
 }
 
@@ -135,6 +184,7 @@ export default function Room({ loaderData, actionData }: Route.ComponentProps) {
         )}
         <h1 className="mt-1 text-2xl font-semibold">{room.title}</h1>
         <ShareLink url={shareUrl} />
+        {isOwner && <GenerateButton />}
       </header>
 
       <Form method="post" ref={formRef} className="mb-8 flex flex-col gap-2">
@@ -181,8 +231,10 @@ type Idea = { id: string; content: string; is_ai: boolean; vote_count: number };
 // without a page navigation, so votes on different ideas don't interfere
 // with each other or with the "Post idea" form.
 function IdeaItem({ idea, voted }: { idea: Idea; voted: boolean }) {
-  const fetcher = useFetcher();
+  // `useFetcher<typeof action>` types fetcher.data as the action's return value.
+  const fetcher = useFetcher<typeof action>();
   const pending = fetcher.state !== "idle";
+  const error = fetcher.data?.error;
 
   return (
     <li className="flex items-start gap-3 rounded border p-3">
@@ -208,8 +260,29 @@ function IdeaItem({ idea, voted }: { idea: Idea; voted: boolean }) {
           </span>
         )}
         {idea.content}
+        {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
       </p>
     </li>
+  );
+}
+
+// Uses a fetcher (not the main <Form>) so its result doesn't clear the
+// "Post idea" textarea, and it has its own loading/error state.
+function GenerateButton() {
+  const fetcher = useFetcher<typeof action>();
+  const pending = fetcher.state !== "idle";
+
+  return (
+    <fetcher.Form method="post" className="mt-3 flex items-center gap-3">
+      <input type="hidden" name="intent" value="generate" />
+      <button
+        disabled={pending}
+        className="rounded bg-purple-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+      >
+        {pending ? "Generating…" : `✨ Generate AI ideas`}
+      </button>
+      {fetcher.data?.error && <span className="text-sm text-red-600">{fetcher.data.error}</span>}
+    </fetcher.Form>
   );
 }
 

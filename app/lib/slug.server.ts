@@ -1,4 +1,3 @@
-// No 0/o or 1/l, so slugs are easy to read aloud or type from a projector.
 const ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
 
 // "Team Brainstorm!" -> "team-brainstorm-k7x2pq"
