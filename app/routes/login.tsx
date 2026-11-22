@@ -1,8 +1,6 @@
 import { data, Form, Link, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/login";
 import { createClient } from "~/lib/supabase.server";
-import { isOAuthProvider, startOAuth } from "~/lib/oauth.server";
-import { OAuthButtons } from "~/components/OAuthButtons";
 
 // LOADER: if a real (non-anonymous) presenter is already logged in, skip the form.
 export async function loader({ request }: Route.LoaderArgs) {
@@ -17,15 +15,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   return data(null, { headers });
 }
 
-// ACTION: either an OAuth button or the email/password form was submitted.
+// ACTION: the email/password form was submitted.
 export async function action({ request }: Route.ActionArgs) {
   const { supabase, headers } = createClient(request);
   const formData = await request.formData();
-  const intent = formData.get("intent");
-
-  if (isOAuthProvider(intent)) {
-    return startOAuth(request, supabase, headers, intent);
-  }
 
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
@@ -83,8 +76,6 @@ export default function Login({ actionData }: Route.ComponentProps) {
           Log in
         </button>
       </Form>
-
-      <OAuthButtons />
 
       <p className="mt-6 text-center text-sm">
         Don't have an account?{" "}

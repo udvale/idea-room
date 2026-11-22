@@ -5,7 +5,7 @@ import { createClient } from "~/lib/supabase.server";
 import { generateIdeas } from "~/lib/gemini.server";
 
 const TOP_N = 5; // how many top-voted ideas to send to Gemini
-const AI_COUNT = 3; // how many new ideas to ask for
+const AI_COUNT = 1; //ai creates 1 new idea each time can change by time 
 
 // LOADER: find the room, make sure the visitor has a session (anonymous if
 // needed), then load the ideas and which ones this visitor already voted on.
@@ -40,7 +40,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // 3. Ideas, most-voted first; ties go to the older idea.
   const { data: ideas } = await supabase
     .from("ideas")
-    .select("id, content, is_ai, vote_count")
+    .select("id, content, is_ai, vote_count, author_name")
     .eq("room_id", room.id)
     .order("vote_count", { ascending: false })
     .order("created_at", { ascending: true });
@@ -52,6 +52,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     : { data: [] };
   const votedIds = (myVotes ?? []).map((v) => v.idea_id as string);
 
+  const displayName = (user.user_metadata?.display_name as string | undefined) ?? null; //for participants
+
   return data(
     {
       room: { slug: room.slug, title: room.title },
@@ -59,6 +61,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       shareUrl: `${new URL(request.url).origin}/room/${room.slug}`,
       ideas: ideas ?? [],
       votedIds,
+      displayName
     },
     { headers },
   );
@@ -70,15 +73,30 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 // After either one, the loader re-runs, so the list re-sorts by votes.
 export async function action({ request, params }: Route.ActionArgs) {
   const { supabase, headers } = createClient(request);
-  const {
+  // `let` so we can replace it below. (A `let user` inside the `if` would be
+  // a new variable that disappears at the closing brace.)
+  let {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return data({ ok: false, error: "Your session expired. Refresh the page." }, { headers });
+    const { data: anon } = await supabase.auth.signInAnonymously(); // no email, no password, no form
+    user = anon.user;
+  }
+  if (!user) {
+    return data({ ok: false, error: "Couldn't start a session. Refresh the page." }, { headers });
   }
 
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  if (intent === "set-name") {
+    const name = String(formData.get("name") ?? "").trim().slice(0, 40);
+    if (!name) return data({ ok: false, error: "Enter a name." }, { headers });
+
+    const { error } = await supabase.auth.updateUser({ data: { display_name: name } });
+    if (error) return data({ ok: false, error: error.message }, { headers });
+    return data({ ok: true, error: null }, { headers });
+  }
 
   if (intent === "add") {
     const content = String(formData.get("content") ?? "").trim();
@@ -93,8 +111,9 @@ export async function action({ request, params }: Route.ActionArgs) {
       .maybeSingle();
     if (!room) return data({ ok: false, error: "Room not found." }, { headers });
 
+    const authorName = (user.user_metadata?.display_name as string | undefined) ?? "Anonymous";
     // author_id defaults to auth.uid(); RLS checks it and forces is_ai = false.
-    const { error } = await supabase.from("ideas").insert({ room_id: room.id, content });
+    const { error } = await supabase.from("ideas").insert({ room_id: room.id, content, author_name: authorName });
     if (error) return data({ ok: false, error: error.message }, { headers });
     return data({ ok: true, error: null }, { headers });
   }
@@ -165,7 +184,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function Room({ loaderData, actionData }: Route.ComponentProps) {
-  const { room, isOwner, shareUrl, ideas, votedIds } = loaderData;
+  const { room, isOwner, shareUrl, ideas, votedIds, displayName } = loaderData;
   const busy = useNavigation().state === "submitting";
 
   // Clear the textarea after an idea is posted.
@@ -186,6 +205,8 @@ export default function Room({ loaderData, actionData }: Route.ComponentProps) {
         <ShareLink url={shareUrl} />
         {isOwner && <GenerateButton />}
       </header>
+
+      <NameBox displayName={displayName} />
 
       <Form method="post" ref={formRef} className="mb-8 flex flex-col gap-2">
         <input type="hidden" name="intent" value="add" />
@@ -225,7 +246,7 @@ export default function Room({ loaderData, actionData }: Route.ComponentProps) {
   );
 }
 
-type Idea = { id: string; content: string; is_ai: boolean; vote_count: number };
+type Idea = { id: string; content: string; is_ai: boolean; vote_count: number; author_name: string | null };
 
 // Each idea gets its own `useFetcher`. A fetcher submits to the action
 // without a page navigation, so votes on different ideas don't interfere
@@ -260,9 +281,55 @@ function IdeaItem({ idea, voted }: { idea: Idea; voted: boolean }) {
           </span>
         )}
         {idea.content}
+        {!idea.is_ai && (
+          <span className="mt-1 block text-xs text-gray-500">— {idea.author_name ?? "Anonymous"}</span>
+        )}
         {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
       </p>
     </li>
+  );
+}
+
+// Separate fetcher so saving a name doesn't touch the idea form.
+function NameBox({ displayName }: { displayName: string | null }) {
+  const fetcher = useFetcher<typeof action>();
+  const [editing, setEditing] = useState(!displayName);
+
+  // Close the form once the name is saved
+  useEffect(() => {
+    if (fetcher.data?.ok) setEditing(false);
+  }, [fetcher.data]);
+
+  if (!editing && displayName) {
+    return (
+      <p className="mb-3 text-sm text-gray-600">
+        Posting as <b>{displayName}</b>{" "}
+        <button type="button" onClick={() => setEditing(true)} className="underline">
+          change
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <fetcher.Form method="post" className="mb-3 flex items-center gap-2">
+      <input type="hidden" name="intent" value="set-name" />
+      <input
+        name="name"
+        defaultValue={displayName ?? ""}
+        required
+        maxLength={40}
+        placeholder="Your name (shown on your ideas)"
+        className="flex-1 rounded border px-3 py-2 text-sm"
+      />
+      <button
+        disabled={fetcher.state !== "idle"}
+        className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+      >
+        Save
+      </button>
+      {fetcher.data?.error && <span className="text-sm text-red-600">{fetcher.data.error}</span>}
+    </fetcher.Form>
   );
 }
 
@@ -279,7 +346,7 @@ function GenerateButton() {
         disabled={pending}
         className="rounded bg-purple-700 px-4 py-2 text-sm text-white disabled:opacity-50"
       >
-        {pending ? "Generating…" : `✨ Generate AI ideas`}
+        {pending ? "Generating…" : `✨ Generate AI idea`}
       </button>
       {fetcher.data?.error && <span className="text-sm text-red-600">{fetcher.data.error}</span>}
     </fetcher.Form>

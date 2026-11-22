@@ -89,6 +89,9 @@ create policy "presenter posts AI ideas" on public.ideas
     and exists (select 1 from public.rooms r where r.id = room_id and r.owner_id = auth.uid())
   );
 
+alter table public.ideas
+  add column author_name text check (char_length(author_name) <= 40);
+
 -- Votes
 create policy "votes are readable" on public.votes
   for select using (true);

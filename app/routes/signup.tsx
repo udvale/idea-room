@@ -1,8 +1,6 @@
 import { data, Form, Link, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/signup";
 import { createClient } from "~/lib/supabase.server";
-import { isOAuthProvider, startOAuth } from "~/lib/oauth.server";
-import { OAuthButtons } from "~/components/OAuthButtons";
 
 // Same as /login: a logged-in presenter doesn't need this page.
 export async function loader({ request }: Route.LoaderArgs) {
@@ -20,20 +18,27 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const { supabase, headers } = createClient(request);
   const formData = await request.formData();
-  const intent = formData.get("intent");
 
-  if (isOAuthProvider(intent)) {
-    return startOAuth(request, supabase, headers, intent);
-  }
-
+  const displayName = String(formData.get("displayName") ?? "").trim();
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  if (!email || !password) {
-    return data({ error: "Email and password are required." }, { headers });
+  if (!displayName || !email || !password) {
+    return data({ error: "Name, email and password are required." }, { headers });
+  }
+  if (displayName.length > 15) {
+    return data({ error: "Display name must be 40 characters or less." }, { headers });
   }
 
-  const { data: signUp, error } = await supabase.auth.signUp({ email, password });
+  // `options.data` is saved as the user's metadata (user.user_metadata).
+  // Participants' names go in the same `display_name` field later, so the
+  // room page can read one field for everyone.
+  const { data: signUp, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { display_name: displayName } },
+  });
   if (error) return data({ error: error.message }, { headers });
+
 
   // If "Confirm email" is on in Supabase, there's no session until they click the link.
   if (!signUp.session) {
@@ -51,6 +56,13 @@ export default function Signup({ actionData }: Route.ComponentProps) {
       <h1 className="mb-6 text-2xl font-semibold">Create a presenter account</h1>
 
       <Form method="post" className="flex flex-col gap-3">
+        <input
+          name="displayName"
+          placeholder="Display name"
+          maxLength={40}
+          required
+          className="rounded border px-3 py-2"
+        />
         <input
           name="email"
           type="email"
@@ -83,8 +95,6 @@ export default function Signup({ actionData }: Route.ComponentProps) {
           Sign up
         </button>
       </Form>
-
-      <OAuthButtons />
 
       <p className="mt-6 text-center text-sm">
         Already have an account?{" "}

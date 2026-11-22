@@ -16,8 +16,11 @@ export async function generateIdeas(
     `These are the group's most upvoted ideas so far:`,
     ...(topIdeas.length ? topIdeas.map((idea, i) => `${i + 1}. ${idea}`) : ["(no ideas yet)"]),
     ``,
-    `Suggest ${count} NEW ideas that build on or complement these.`,
+    count === 1
+      ? `Suggest exactly 1 NEW idea that builds on or complements these.`
+      : `Suggest ${count} NEW ideas that build on or complement these.`,
     `Each idea must be one or two sentences and under 280 characters.`,
+    `Reply with a JSON array of ${count} string(s).`,
     `Don't repeat or rephrase the existing ideas.`,
   ].join("\n");
 

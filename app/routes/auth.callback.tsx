@@ -2,9 +2,10 @@ import { redirect } from "react-router";
 import type { Route } from "./+types/auth.callback";
 import { createClient } from "~/lib/supabase.server";
 
-// Supabase sends users back here with ?code=... after OAuth login or after
-// clicking a password-reset email link. We trade that one-time code for a
-// real session (sets the auth cookies), then go to `next` (default: home).
+// Supabase sends users back here with ?code=... after they click a link in
+// an auth email (password reset, or sign-up confirmation if that's turned on).
+// We trade that one-time code for a real session (sets the auth cookies),
+// then go to `next` (default: home).
 export async function loader({ request }: Route.LoaderArgs) {
   const { supabase, headers } = createClient(request);
   const url = new URL(request.url);
