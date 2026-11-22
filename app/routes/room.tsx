@@ -3,6 +3,7 @@ import { data, Form, Link, useFetcher, useNavigation } from "react-router";
 import type { Route } from "./+types/room";
 import { createClient } from "~/lib/supabase.server";
 import { generateIdeas } from "~/lib/gemini.server";
+import { Button } from "~/components/ui/button"
 
 const TOP_N = 5; // how many top-voted ideas to send to Gemini
 const AI_COUNT = 1; //ai creates 1 new idea each time can change by time 
@@ -224,12 +225,9 @@ export default function Room({ loaderData, actionData }: Route.ComponentProps) {
           ) : (
             <span className="text-xs text-gray-500">Max 280 characters</span>
           )}
-          <button
-            disabled={busy}
-            className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-          >
+          <Button type="submit" size="lg" disabled={busy}>
             Post idea
-          </button>
+          </Button>
         </div>
       </Form>
 
@@ -263,16 +261,17 @@ function IdeaItem({ idea, voted }: { idea: Idea; voted: boolean }) {
         <input type="hidden" name="intent" value="vote" />
         <input type="hidden" name="ideaId" value={idea.id} />
         <input type="hidden" name="voted" value={String(voted)} />
-        <button
+        {/* Filled (default) when I've voted, outlined when I haven't. */}
+        <Button
+          type="submit"
+          variant={voted ? "default" : "outline"}
           disabled={pending}
           aria-label={voted ? "Remove upvote" : "Upvote"}
-          className={`flex w-12 flex-col items-center rounded border px-2 py-1 text-sm disabled:opacity-50 ${
-            voted ? "border-black bg-black text-white" : ""
-          }`}
+          className="h-auto w-12 flex-col gap-0 py-1"
         >
           <span>▲</span>
           <span>{idea.vote_count}</span>
-        </button>
+        </Button>
       </fetcher.Form>
       <p className="flex-1 whitespace-pre-wrap break-words pt-1">
         {idea.is_ai && (
@@ -304,9 +303,15 @@ function NameBox({ displayName }: { displayName: string | null }) {
     return (
       <p className="mb-3 text-sm text-gray-600">
         Posting as <b>{displayName}</b>{" "}
-        <button type="button" onClick={() => setEditing(true)} className="underline">
+        <Button
+          type="button"
+          variant="link"
+          size="xs"
+          onClick={() => setEditing(true)}
+          className="h-auto px-0 underline"
+        >
           change
-        </button>
+        </Button>
       </p>
     );
   }
@@ -322,12 +327,9 @@ function NameBox({ displayName }: { displayName: string | null }) {
         placeholder="Your name (shown on your ideas)"
         className="flex-1 rounded border px-3 py-2 text-sm"
       />
-      <button
-        disabled={fetcher.state !== "idle"}
-        className="rounded border px-3 py-2 text-sm disabled:opacity-50"
-      >
+      <Button type="submit" variant="outline" size="lg" disabled={fetcher.state !== "idle"}>
         Save
-      </button>
+      </Button>
       {fetcher.data?.error && <span className="text-sm text-red-600">{fetcher.data.error}</span>}
     </fetcher.Form>
   );
@@ -342,12 +344,15 @@ function GenerateButton() {
   return (
     <fetcher.Form method="post" className="mt-3 flex items-center gap-3">
       <input type="hidden" name="intent" value="generate" />
-      <button
+      {/* Purple on purpose, to match the purple "AI" badge on generated ideas. */}
+      <Button
+        type="submit"
+        size="lg"
         disabled={pending}
-        className="rounded bg-purple-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+        className="bg-purple-700 text-white hover:bg-purple-800"
       >
         {pending ? "Generating…" : `✨ Generate AI idea`}
-      </button>
+      </Button>
       {fetcher.data?.error && <span className="text-sm text-red-600">{fetcher.data.error}</span>}
     </fetcher.Form>
   );
@@ -359,17 +364,18 @@ function ShareLink({ url }: { url: string }) {
   return (
     <div className="mt-2 flex items-center gap-2 text-sm">
       <code className="truncate rounded bg-gray-100 px-2 py-1">{url}</code>
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={() => {
           navigator.clipboard.writeText(url);
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         }}
-        className="rounded border px-2 py-1"
       >
         {copied ? "Copied!" : "Copy"}
-      </button>
+      </Button>
     </div>
   );
 }

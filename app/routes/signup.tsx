@@ -1,6 +1,20 @@
 import { data, Form, Link, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/signup";
 import { createClient } from "~/lib/supabase.server";
+import { Button } from "~/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+
+// One place for the limit, used by both the server check and the input.
+const MAX_NAME = 15;
 
 // Same as /login: a logged-in presenter doesn't need this page.
 export async function loader({ request }: Route.LoaderArgs) {
@@ -25,8 +39,11 @@ export async function action({ request }: Route.ActionArgs) {
   if (!displayName || !email || !password) {
     return data({ error: "Name, email and password are required." }, { headers });
   }
-  if (displayName.length > 15) {
-    return data({ error: "Display name must be 40 characters or less." }, { headers });
+  if (displayName.length > MAX_NAME) {
+    return data(
+      { error: `Display name must be ${MAX_NAME} characters or less.` },
+      { headers },
+    );
   }
 
   // `options.data` is saved as the user's metadata (user.user_metadata).
@@ -86,14 +103,9 @@ export default function Signup({ actionData }: Route.ComponentProps) {
           <p className="text-sm text-green-700">{actionData.message}</p>
         )}
 
-        <button
-          name="intent"
-          value="signup"
-          disabled={busy}
-          className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-        >
+        <Button type="submit" size="lg" disabled={busy}>
           Sign up
-        </button>
+        </Button>
       </Form>
 
       <p className="mt-6 text-center text-sm">

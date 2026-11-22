@@ -1,6 +1,7 @@
 import { data, Form, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/reset-password";
 import { createClient } from "~/lib/supabase.server";
+import { Button } from "~/components/ui/button";
 
 // LOADER: the reset link already logged the user in (via /auth/callback).
 // No session means they got here without a valid link.
@@ -60,12 +61,9 @@ export default function ResetPassword({ actionData }: Route.ComponentProps) {
 
         {actionData?.error && <p className="text-sm text-red-600">{actionData.error}</p>}
 
-        <button
-          disabled={busy}
-          className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-        >
+        <Button type="submit" size="lg" disabled={busy}>
           Save password
-        </button>
+        </Button>
       </Form>
     </main>
   );

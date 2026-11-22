@@ -1,6 +1,7 @@
 import { data, Form, Link, useNavigation } from "react-router";
 import type { Route } from "./+types/forgot-password";
 import { createClient } from "~/lib/supabase.server";
+import { Button } from "~/components/ui/button";
 
 // ACTION: ask Supabase to email a reset link. The link comes back through
 // /auth/callback (which logs the user in) and then on to /reset-password.
@@ -52,12 +53,9 @@ export default function ForgotPassword({ actionData }: Route.ComponentProps) {
           <p className="text-sm text-green-700">{actionData.message}</p>
         )}
 
-        <button
-          disabled={busy}
-          className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-        >
+        <Button type="submit" size="lg" disabled={busy}>
           Send reset link
-        </button>
+        </Button>
       </Form>
 
       <p className="mt-6 text-center text-sm">

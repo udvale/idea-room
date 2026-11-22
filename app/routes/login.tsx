@@ -1,6 +1,17 @@
 import { data, Form, Link, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/login";
 import { createClient } from "~/lib/supabase.server";
+import { Button } from "~/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 
 // LOADER: if a real (non-anonymous) presenter is already logged in, skip the form.
 export async function loader({ request }: Route.LoaderArgs) {
@@ -43,46 +54,52 @@ export default function Login({ actionData }: Route.ComponentProps) {
   const busy = useNavigation().state === "submitting";
 
   return (
-    <main className="mx-auto mt-24 max-w-sm p-6">
-      <h1 className="mb-6 text-2xl font-semibold">Presenter login</h1>
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Presenter login</CardTitle>
+          <CardDescription>Enter your email below to log in to your account</CardDescription>
+        </CardHeader>
 
-      <Form method="post" className="flex flex-col gap-3">
-        <input
-          name="email"
-          type="email"
-          placeholder="you@example.com"
-          required
-          className="rounded border px-3 py-2"
-        />
-        <input
-          name="password"
-          type="password"
-          placeholder="Password"
-          required
-          className="rounded border px-3 py-2"
-        />
-        <Link to="/forgot-password" className="-mt-1 self-end text-sm underline">
-          Forgot password?
-        </Link>
+        <CardContent>
+          {/* React Router's <Form method="post"> sends this to the action above.
+              The submit button must be INSIDE the form to submit it. */}
+          <Form method="post" className="flex flex-col gap-6">
+            <div className="grid gap-2">
+              {/* htmlFor matches the input's id, so clicking the label focuses it.
+                  `name` is what the action reads with formData.get(...). */}
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" placeholder="you@example.com" required />
+            </div>
 
-        {actionData?.error && <p className="text-sm text-red-600">{actionData.error}</p>}
+            <div className="grid gap-2">
+              <div className="flex items-center">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  to="/forgot-password"
+                  className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
+              <Input id="password" name="password" type="password" required />
+            </div>
 
-        <button
-          name="intent"
-          value="login"
-          disabled={busy}
-          className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-        >
-          Log in
-        </button>
-      </Form>
+            {actionData?.error && <p className="text-sm text-destructive">{actionData.error}</p>}
 
-      <p className="mt-6 text-center text-sm">
-        Don't have an account?{" "}
-        <Link to="/signup" className="underline">
-          Sign up
-        </Link>
-      </p>
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Logging in…" : "Log in"}
+            </Button>
+          </Form>
+        </CardContent>
+
+        <CardFooter className="justify-center text-sm">
+          Don't have an account?&nbsp;
+          <Link to="/signup" className="underline underline-offset-4">
+            Sign up
+          </Link>
+        </CardFooter>
+      </Card>
     </main>
   );
 }

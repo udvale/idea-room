@@ -3,6 +3,7 @@ import { data, Form, Link, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/home";
 import { createClient } from "~/lib/supabase.server";
 import { makeSlug } from "~/lib/slug.server";
+import { Button } from "~/components/ui/button";
 
 // LOADER: home is the presenter dashboard, so only real (non-anonymous)
 // users get in. Everyone else goes to /login.
@@ -82,7 +83,9 @@ export default function Home({ loaderData, actionData }: Route.ComponentProps) {
         <div className="flex items-center gap-3 text-sm">
           <span className="text-gray-600">{email}</span>
           <Form method="post" action="/logout">
-            <button className="rounded border px-3 py-1">Log out</button>
+            <Button type="submit" variant="outline" size="sm">
+              Log out
+            </Button>
           </Form>
         </div>
       </header>
@@ -97,12 +100,9 @@ export default function Home({ loaderData, actionData }: Route.ComponentProps) {
             required
             className="flex-1 rounded border px-3 py-2"
           />
-          <button
-            disabled={busy}
-            className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-          >
+          <Button type="submit" size="lg" disabled={busy}>
             Create
-          </button>
+          </Button>
         </Form>
         {actionData?.error && <p className="mt-2 text-sm text-red-600">{actionData.error}</p>}
       </section>
