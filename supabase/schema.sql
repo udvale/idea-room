@@ -90,7 +90,7 @@ create policy "presenter posts AI ideas" on public.ideas
   );
 
 alter table public.ideas
-  add column author_name text check (char_length(author_name) <= 40);
+  add column author_name text check (char_length(author_name) <= 15);
 
 -- Votes
 create policy "votes are readable" on public.votes

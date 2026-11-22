@@ -4,6 +4,8 @@ import type { Route } from "./+types/home";
 import { createClient } from "~/lib/supabase.server";
 import { makeSlug } from "~/lib/slug.server";
 import { Button } from "~/components/ui/button";
+import { Textarea } from "~/components/ui/textarea";
+import { Card, CardContent } from "~/components/ui/card";
 
 // LOADER: home is the presenter dashboard, so only real (non-anonymous)
 // users get in. Everyone else goes to /login.
@@ -92,15 +94,9 @@ export default function Home({ loaderData, actionData }: Route.ComponentProps) {
 
       <section className="mb-10">
         <h2 className="mb-3 text-lg font-medium">Create a room</h2>
-        <Form method="post" ref={formRef} className="flex gap-2">
-          <input
-            name="title"
-            placeholder="e.g. Q3 product ideas"
-            maxLength={120}
-            required
-            className="flex-1 rounded border px-3 py-2"
-          />
-          <Button type="submit" size="lg" disabled={busy}>
+        <Form method="post" ref={formRef} className="flex flex-col gap-2">
+          <Textarea name="title" placeholder="e.g. Q3 product ideas" maxLength={120} required />
+          <Button type="submit" size="lg" disabled={busy} className="self-end">
             Create
           </Button>
         </Form>
@@ -109,19 +105,24 @@ export default function Home({ loaderData, actionData }: Route.ComponentProps) {
 
       <section>
         <h2 className="mb-3 text-lg font-medium">My rooms</h2>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
         {rooms.length === 0 ? (
-          <p className="text-sm text-gray-500">No rooms yet. Create one above.</p>
+          <p className="text-sm text-muted-foreground">No rooms yet. Create one above.</p>
         ) : (
-          <ul className="divide-y rounded border">
+          // Same look as the ideas list: a stack of small Cards with a gap.
+          <ul className="flex flex-col gap-2">
             {rooms.map((room) => (
               <li key={room.id}>
-                <Link
-                  to={`/room/${room.slug}`}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
-                >
-                  <span className="font-medium">{room.title}</span>
-                  <span className="font-mono text-sm text-gray-500">/room/{room.slug}</span>
+                {/* The whole card is the link, so anywhere on it opens the room. */}
+                <Link to={`/room/${room.slug}`} className="block">
+                  <Card size="sm" className="transition-colors hover:bg-muted/50">
+                    <CardContent className="flex items-center justify-between gap-3">
+                      <span className="font-medium wrap-break-word">{room.title}</span>
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                        /room/{room.slug}
+                      </span>
+                    </CardContent>
+                  </Card>
                 </Link>
               </li>
             ))}

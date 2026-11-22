@@ -2,6 +2,16 @@ import { data, Form, Link, useNavigation } from "react-router";
 import type { Route } from "./+types/forgot-password";
 import { createClient } from "~/lib/supabase.server";
 import { Button } from "~/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 
 // ACTION: ask Supabase to email a reset link. The link comes back through
 // /auth/callback (which logs the user in) and then on to /reset-password.
@@ -31,38 +41,41 @@ export default function ForgotPassword({ actionData }: Route.ComponentProps) {
   const busy = useNavigation().state === "submitting";
 
   return (
-    <main className="mx-auto mt-24 max-w-sm p-6">
-      <h1 className="mb-2 text-2xl font-semibold">Reset your password</h1>
-      <p className="mb-6 text-sm text-gray-600">
-        Enter your email and we'll send you a link to set a new password.
-      </p>
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Reset your password</CardTitle>
+          <CardDescription>
+            Enter your email and we'll send you a link to set a new password.
+          </CardDescription>
+        </CardHeader>
 
-      <Form method="post" className="flex flex-col gap-3">
-        <input
-          name="email"
-          type="email"
-          placeholder="you@example.com"
-          required
-          className="rounded border px-3 py-2"
-        />
+        <CardContent>
+          <Form method="post" className="flex flex-col gap-6">
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" placeholder="you@example.com" required />
+            </div>
 
-        {actionData && "error" in actionData && (
-          <p className="text-sm text-red-600">{actionData.error}</p>
-        )}
-        {actionData && "message" in actionData && (
-          <p className="text-sm text-green-700">{actionData.message}</p>
-        )}
+            {actionData && "error" in actionData && (
+              <p className="text-sm text-destructive">{actionData.error}</p>
+            )}
+            {actionData && "message" in actionData && (
+              <p className="text-sm text-green-700">{actionData.message}</p>
+            )}
 
-        <Button type="submit" size="lg" disabled={busy}>
-          Send reset link
-        </Button>
-      </Form>
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Sending…" : "Send reset link"}
+            </Button>
+          </Form>
+        </CardContent>
 
-      <p className="mt-6 text-center text-sm">
-        <Link to="/login" className="underline">
-          Back to log in
-        </Link>
-      </p>
+        <CardFooter className="justify-center text-sm">
+          <Link to="/login" className="underline underline-offset-4">
+            Back to log in
+          </Link>
+        </CardFooter>
+      </Card>
     </main>
   );
 }

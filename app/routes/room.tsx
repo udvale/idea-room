@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { data, Form, Link, useFetcher, useNavigation } from "react-router";
+import { data, Form, Link, useFetcher, useNavigation, useRevalidator } from "react-router";
 import type { Route } from "./+types/room";
 import { createClient } from "~/lib/supabase.server";
 import { generateIdeas } from "~/lib/gemini.server";
+import { getBrowserClient } from "~/lib/supabase.client";
 import { Button } from "~/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Textarea } from "~/components/ui/textarea"
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { Badge } from "~/components/ui/badge";
 
 const TOP_N = 5; // how many top-voted ideas to send to Gemini
-const AI_COUNT = 1; //ai creates 1 new idea each time can change by time 
+const AI_COUNT = 1; //ai creates 1 new idea each time can change by time
+const MAX_NAME = 15; // same limit as the presenter display name on /signup
 
 // LOADER: find the room, make sure the visitor has a session (anonymous if
 // needed), then load the ideas and which ones this visitor already voted on.
@@ -57,7 +64,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return data(
     {
-      room: { slug: room.slug, title: room.title },
+      room: { id: room.id, slug: room.slug, title: room.title },
+      // For the browser's realtime client. Both are public by design.
+      supabaseUrl: process.env.SUPABASE_URL!,
+      supabaseKey: process.env.SUPABASE_PUBLISHABLE_KEY!,
       isOwner: room.owner_id === user.id,
       shareUrl: `${new URL(request.url).origin}/room/${room.slug}`,
       ideas: ideas ?? [],
@@ -91,12 +101,22 @@ export async function action({ request, params }: Route.ActionArgs) {
   const intent = formData.get("intent");
 
   if (intent === "set-name") {
-    const name = String(formData.get("name") ?? "").trim().slice(0, 40);
+    const name = String(formData.get("name") ?? "").trim();
     if (!name) return data({ ok: false, error: "Enter a name." }, { headers });
+    if (name.length > MAX_NAME) {
+      return data({ ok: false, error: `Name must be ${MAX_NAME} characters or less.` }, { headers });
+    }
 
     const { error } = await supabase.auth.updateUser({ data: { display_name: name } });
     if (error) return data({ ok: false, error: error.message }, { headers });
     return data({ ok: true, error: null }, { headers });
+  }
+
+  // Posting and voting need a name first. The join screen enforces this in
+  // the UI; this is the server-side check (anyone can POST to this action).
+  const displayName = (user.user_metadata?.display_name as string | undefined)?.trim() || null;
+  if ((intent === "add" || intent === "vote") && !displayName) {
+    return data({ ok: false, error: "Enter your name to participate." }, { headers });
   }
 
   if (intent === "add") {
@@ -112,9 +132,11 @@ export async function action({ request, params }: Route.ActionArgs) {
       .maybeSingle();
     if (!room) return data({ ok: false, error: "Room not found." }, { headers });
 
-    const authorName = (user.user_metadata?.display_name as string | undefined) ?? "Anonymous";
     // author_id defaults to auth.uid(); RLS checks it and forces is_ai = false.
-    const { error } = await supabase.from("ideas").insert({ room_id: room.id, content, author_name: authorName });
+    // author_name comes from the server-side user, never from the form.
+    const { error } = await supabase
+      .from("ideas")
+      .insert({ room_id: room.id, content, author_name: displayName });
     if (error) return data({ ok: false, error: error.message }, { headers });
     return data({ ok: true, error: null }, { headers });
   }
@@ -185,14 +207,51 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function Room({ loaderData, actionData }: Route.ComponentProps) {
-  const { room, isOwner, shareUrl, ideas, votedIds, displayName } = loaderData;
+  const { room, isOwner, shareUrl, ideas, votedIds, displayName, supabaseUrl, supabaseKey } =
+    loaderData;
   const busy = useNavigation().state === "submitting";
+
+  // REALTIME: listen for any change to this room's ideas (new idea, AI idea,
+  // or vote_count changing because someone voted). On each change we just
+  // re-run the loader, so the list, sort order and my votes stay correct
+  // with no extra merging logic in the browser.
+  const revalidator = useRevalidator();
+  const revalidateRef = useRef(revalidator.revalidate);
+  revalidateRef.current = revalidator.revalidate;
+
+  useEffect(() => {
+    const supabase = getBrowserClient(supabaseUrl, supabaseKey);
+    const channel = supabase
+      .channel(`room-${room.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ideas", filter: `room_id=eq.${room.id}` },
+        (payload) => {
+          console.log("[realtime] change:", payload.eventType); // debug: remove when working
+          revalidateRef.current();
+        },
+      )
+      // debug: shows SUBSCRIBED when connected, or an error. Remove when working.
+      .subscribe((status, err) => console.log("[realtime] status:", status, err ?? ""));
+
+    // Cleanup: stop listening when leaving the page (or switching rooms).
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [room.id, supabaseUrl, supabaseKey]);
 
   // Clear the textarea after an idea is posted.
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (actionData?.ok) formRef.current?.reset();
   }, [actionData]);
+
+  // No name yet -> Kahoot-style: only the name box, nothing else.
+  // (This comes AFTER the hooks above on purpose: React needs hooks to run
+  // in the same order every render, so no early `return` before them.)
+  if (!displayName) {
+    return <JoinScreen title={room.title} />;
+  }
 
   return (
     <main className="mx-auto max-w-2xl p-6">
@@ -204,32 +263,31 @@ export default function Room({ loaderData, actionData }: Route.ComponentProps) {
         )}
         <h1 className="mt-1 text-2xl font-semibold">{room.title}</h1>
         <ShareLink url={shareUrl} />
-        {isOwner && <GenerateButton />}
       </header>
 
       <NameBox displayName={displayName} />
 
-      <Form method="post" ref={formRef} className="mb-8 flex flex-col gap-2">
+      <Form id="idea-form" method="post" ref={formRef} className="flex flex-col gap-2">
         <input type="hidden" name="intent" value="add" />
-        <textarea
-          name="content"
-          placeholder="Share an idea…"
-          maxLength={280}
-          rows={3}
-          required
-          className="rounded border px-3 py-2"
-        />
-        <div className="flex items-center justify-between">
-          {actionData?.error ? (
-            <p className="text-sm text-red-600">{actionData.error}</p>
-          ) : (
-            <span className="text-xs text-gray-500">Max 280 characters</span>
-          )}
-          <Button type="submit" size="lg" disabled={busy}>
+        <Textarea name="content" placeholder="Share an idea…" maxLength={280} required />
+      </Form>
+
+      {/* Outside the <Form> on purpose: GenerateButton is its own form, and
+          forms can't be nested. `form="idea-form"` lets Post idea submit the
+          form above even though it isn't inside it. */}
+      <div className="mt-2 mb-8 flex items-center justify-between">
+        {actionData?.error ? (
+          <p className="text-sm text-red-600">{actionData.error}</p>
+        ) : (
+          <span className="text-xs text-gray-500">Max 280 characters</span>
+        )}
+        <div className="flex flex-row items-center gap-2">
+          {isOwner && <GenerateButton />}
+          <Button type="submit" form="idea-form" size="lg" disabled={busy}>
             Post idea
           </Button>
         </div>
-      </Form>
+      </div>
 
       {ideas.length === 0 ? (
         <p className="text-sm text-gray-500">No ideas yet. Be the first!</p>
@@ -256,36 +314,85 @@ function IdeaItem({ idea, voted }: { idea: Idea; voted: boolean }) {
   const error = fetcher.data?.error;
 
   return (
-    <li className="flex items-start gap-3 rounded border p-3">
-      <fetcher.Form method="post">
-        <input type="hidden" name="intent" value="vote" />
-        <input type="hidden" name="ideaId" value={idea.id} />
-        <input type="hidden" name="voted" value={String(voted)} />
-        {/* Filled (default) when I've voted, outlined when I haven't. */}
-        <Button
-          type="submit"
-          variant={voted ? "default" : "outline"}
-          disabled={pending}
-          aria-label={voted ? "Remove upvote" : "Upvote"}
-          className="h-auto w-12 flex-col gap-0 py-1"
-        >
-          <span>▲</span>
-          <span>{idea.vote_count}</span>
-        </Button>
-      </fetcher.Form>
-      <p className="flex-1 whitespace-pre-wrap break-words pt-1">
-        {idea.is_ai && (
-          <span className="mr-2 rounded bg-purple-100 px-1.5 py-0.5 text-xs text-purple-800">
-            AI
-          </span>
-        )}
-        {idea.content}
-        {!idea.is_ai && (
-          <span className="mt-1 block text-xs text-gray-500">— {idea.author_name ?? "Anonymous"}</span>
-        )}
-        {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
-      </p>
+    // <li> stays as the list item for the <ul>; the Card is the visual box.
+    <li>
+      <Card size="sm">
+        <CardContent className="flex items-start gap-3">
+          <fetcher.Form method="post">
+            <input type="hidden" name="intent" value="vote" />
+            <input type="hidden" name="ideaId" value={idea.id} />
+            <input type="hidden" name="voted" value={String(voted)} />
+            {/* Filled (default) when I've voted, outlined when I haven't. */}
+            <Button
+              type="submit"
+              variant={voted ? "default" : "outline"}
+              disabled={pending}
+              aria-label={voted ? "Remove upvote" : "Upvote"}
+              className="h-auto w-12 flex-col gap-0 py-1"
+            >
+              <span>▲</span>
+              <span>{idea.vote_count}</span>
+            </Button>
+          </fetcher.Form>
+
+          <div className="flex-1 pt-1">
+            <p className="whitespace-pre-wrap wrap-break-word">
+              {idea.is_ai && (
+                <Badge variant="secondary" className="mr-2 align-middle">
+                  AI
+                </Badge>
+              )}
+              {idea.content}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {idea.is_ai ? "Generated by AI" : `— ${idea.author_name ?? "Anonymous"}`}
+            </p>
+            {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
+          </div>
+        </CardContent>
+      </Card>
     </li>
+  );
+}
+
+// Full-screen, centered name box shown before entering the room.
+// After a successful save, React Router re-runs the loader automatically;
+// displayName is no longer null, so the real room appears.
+function JoinScreen({ title }: { title: string }) {
+  const fetcher = useFetcher<typeof action>();
+  const busy = fetcher.state !== "idle";
+
+  return (
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardDescription>You're joining</CardDescription>
+          <CardTitle className="text-2xl">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <fetcher.Form method="post" className="flex flex-col gap-4">
+            <input type="hidden" name="intent" value="set-name" />
+            <div className="grid gap-2">
+              <Label htmlFor="name">Your name</Label>
+              <Input
+                id="name"
+                name="name"
+                placeholder="Shown on your ideas"
+                maxLength={MAX_NAME}
+                required
+                autoFocus
+              />
+            </div>
+            {fetcher.data?.error && (
+              <p className="text-sm text-destructive">{fetcher.data.error}</p>
+            )}
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Joining…" : "Join"}
+            </Button>
+          </fetcher.Form>
+        </CardContent>
+      </Card>
+    </main>
   );
 }
 
@@ -323,7 +430,7 @@ function NameBox({ displayName }: { displayName: string | null }) {
         name="name"
         defaultValue={displayName ?? ""}
         required
-        maxLength={40}
+        maxLength={MAX_NAME}
         placeholder="Your name (shown on your ideas)"
         className="flex-1 rounded border px-3 py-2 text-sm"
       />
@@ -342,7 +449,7 @@ function GenerateButton() {
   const pending = fetcher.state !== "idle";
 
   return (
-    <fetcher.Form method="post" className="mt-3 flex items-center gap-3">
+    <fetcher.Form method="post" className="flex items-center gap-3">
       <input type="hidden" name="intent" value="generate" />
       {/* Purple on purpose, to match the purple "AI" badge on generated ideas. */}
       <Button

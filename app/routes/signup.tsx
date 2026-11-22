@@ -69,51 +69,62 @@ export default function Signup({ actionData }: Route.ComponentProps) {
   const busy = useNavigation().state === "submitting";
 
   return (
-    <main className="mx-auto mt-24 max-w-sm p-6">
-      <h1 className="mb-6 text-2xl font-semibold">Create a presenter account</h1>
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Create a presenter account</CardTitle>
+          <CardDescription>Presenters create rooms and share the link with participants</CardDescription>
+        </CardHeader>
 
-      <Form method="post" className="flex flex-col gap-3">
-        <input
-          name="displayName"
-          placeholder="Display name"
-          maxLength={40}
-          required
-          className="rounded border px-3 py-2"
-        />
-        <input
-          name="email"
-          type="email"
-          placeholder="you@example.com"
-          required
-          className="rounded border px-3 py-2"
-        />
-        <input
-          name="password"
-          type="password"
-          placeholder="Password (min 6 characters)"
-          minLength={6}
-          required
-          className="rounded border px-3 py-2"
-        />
+        <CardContent>
+          <Form method="post" className="flex flex-col gap-6">
+            <div className="grid gap-2">
+              <Label htmlFor="displayName">Display name</Label>
+              <Input
+                id="displayName"
+                name="displayName"
+                maxLength={MAX_NAME}
+                required
+              />
+            </div>
 
-        {actionData && "error" in actionData && (
-          <p className="text-sm text-red-600">{actionData.error}</p>
-        )}
-        {actionData && "message" in actionData && (
-          <p className="text-sm text-green-700">{actionData.message}</p>
-        )}
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" placeholder="you@example.com" required />
+            </div>
 
-        <Button type="submit" size="lg" disabled={busy}>
-          Sign up
-        </Button>
-      </Form>
+            <div className="grid gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="At least 6 characters"
+                minLength={6}
+                required
+              />
+            </div>
 
-      <p className="mt-6 text-center text-sm">
-        Already have an account?{" "}
-        <Link to="/login" className="underline">
-          Log in
-        </Link>
-      </p>
+            {actionData && "error" in actionData && (
+              <p className="text-sm text-destructive">{actionData.error}</p>
+            )}
+            {actionData && "message" in actionData && (
+              <p className="text-sm text-green-700">{actionData.message}</p>
+            )}
+
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Creating account…" : "Sign up"}
+            </Button>
+          </Form>
+        </CardContent>
+
+        <CardFooter className="justify-center text-sm">
+          Already have an account?&nbsp;
+          <Link to="/login" className="underline underline-offset-4">
+            Log in
+          </Link>
+        </CardFooter>
+      </Card>
     </main>
   );
 }

@@ -2,6 +2,15 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/reset-password";
 import { createClient } from "~/lib/supabase.server";
 import { Button } from "~/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 
 // LOADER: the reset link already logged the user in (via /auth/callback).
 // No session means they got here without a valid link.
@@ -38,33 +47,40 @@ export default function ResetPassword({ actionData }: Route.ComponentProps) {
   const busy = useNavigation().state === "submitting";
 
   return (
-    <main className="mx-auto mt-24 max-w-sm p-6">
-      <h1 className="mb-6 text-2xl font-semibold">Choose a new password</h1>
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Choose a new password</CardTitle>
+          <CardDescription>You'll be logged in once it's saved.</CardDescription>
+        </CardHeader>
 
-      <Form method="post" className="flex flex-col gap-3">
-        <input
-          name="password"
-          type="password"
-          placeholder="New password (min 6 characters)"
-          minLength={6}
-          required
-          className="rounded border px-3 py-2"
-        />
-        <input
-          name="confirm"
-          type="password"
-          placeholder="Confirm new password"
-          minLength={6}
-          required
-          className="rounded border px-3 py-2"
-        />
+        <CardContent>
+          <Form method="post" className="flex flex-col gap-6">
+            <div className="grid gap-2">
+              <Label htmlFor="password">New password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="At least 6 characters"
+                minLength={6}
+                required
+              />
+            </div>
 
-        {actionData?.error && <p className="text-sm text-red-600">{actionData.error}</p>}
+            <div className="grid gap-2">
+              <Label htmlFor="confirm">Confirm new password</Label>
+              <Input id="confirm" name="confirm" type="password" minLength={6} required />
+            </div>
 
-        <Button type="submit" size="lg" disabled={busy}>
-          Save password
-        </Button>
-      </Form>
+            {actionData?.error && <p className="text-sm text-destructive">{actionData.error}</p>}
+
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Saving…" : "Save password"}
+            </Button>
+          </Form>
+        </CardContent>
+      </Card>
     </main>
   );
 }

@@ -62,12 +62,8 @@ export default function Login({ actionData }: Route.ComponentProps) {
         </CardHeader>
 
         <CardContent>
-          {/* React Router's <Form method="post"> sends this to the action above.
-              The submit button must be INSIDE the form to submit it. */}
           <Form method="post" className="flex flex-col gap-6">
             <div className="grid gap-2">
-              {/* htmlFor matches the input's id, so clicking the label focuses it.
-                  `name` is what the action reads with formData.get(...). */}
               <Label htmlFor="email">Email</Label>
               <Input id="email" name="email" type="email" placeholder="you@example.com" required />
             </div>
