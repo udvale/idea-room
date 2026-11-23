@@ -483,7 +483,6 @@ function ShareLink({ url }: { url: string }) {
         }}
         className="absolute right-1 h-7 w-7 text-muted-foreground hover:text-foreground"
       >
-        {/* {copied ? "Copied!" : "Copy"} */}
         {copied ? (<Check size={4}/>) : (<Copy size={4}/>)}
       </Button>
     </div>
